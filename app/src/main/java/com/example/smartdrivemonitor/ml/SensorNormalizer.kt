@@ -1,6 +1,7 @@
 package com.example.smartdrivemonitor.ml
 
 import android.content.Context
+import android.util.Log
 import org.json.JSONObject
 
 class SensorNormalizer(context: Context) {
@@ -15,8 +16,8 @@ class SensorNormalizer(context: Context) {
         val json = try {
             context.assets.open(ModelConfig.SCALER_META_FILE)
                 .bufferedReader().readText()
-        } catch (e: Exception) {
-            // Fallback mock metadata if file missing (for initial build)
+        }catch (e: Exception) {
+            Log.e("SensorNormalizer", "🚨 CRITICAL: scaler_meta.json NOT FOUND! Using unscaled fallback. Model predictions will be WRONG!", e)
             "{ 'mean': [0,0,0,0,0,0,0,0,0,0,0], 'scale': [1,1,1,1,1,1,1,1,1,1,1], 'features': [] }"
         }
         

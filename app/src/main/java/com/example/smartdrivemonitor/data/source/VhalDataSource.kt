@@ -18,7 +18,7 @@ import javax.inject.Singleton
 class VhalDataSource @Inject constructor(private val carPropertyManager: CarPropertyManager) {
 
     private val _sharedFlows = mutableMapOf<Int, Flow<Float>>()
-َ
+
     // VHAL Property IDs
     // Hardcoded to ensure compilation across different Android Automotive SDK versions
     private val SPEED_PROP = 291504647        // PERF_VEHICLE_SPEED
