@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.runningFold
 class TelemetryBuffer(private val windowSize: Int) {
 
     /**
-     * يحول تيار البيانات الفردي إلى "نوافذ" (Windows) من القراءات المجمعة.
+     * Converts a stream of individual frames into a sliding window of collected readings.
      */
     fun bufferStream(flow: Flow<SensorFrame>): Flow<List<SensorFrame>> {
         return flow.runningFold(emptyList<SensorFrame>()) { accumulator, value ->

@@ -6,7 +6,7 @@ import kotlin.math.abs
 
 class AnalyzeDrivingBehaviorUseCase {
 
-    // استخدام operator fun invoke بيخلينا ننادي الـ UseCase كأنه دالة مباشرة
+    // Operator invoke allows the UseCase to be called as a function
     operator fun invoke(frames: List<SensorFrame>): DrivingState {
         if (frames.size < 2) return DrivingState.NORMAL
 

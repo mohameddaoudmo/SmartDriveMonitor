@@ -2,37 +2,41 @@ package com.example.smartdrivemonitor.data.source
 
 import com.example.smartdrivemonitor.domain.model.DrivingState
 import com.example.smartdrivemonitor.domain.model.SensorFrame
-
 import android.content.Context
 import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.FileWriter
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class DataLogger(private val context: Context) {
+@Singleton
+class DataLogger @Inject constructor(@ApplicationContext private val context: Context) {
 
-    // اسم الملف اللي هنجمع فيه الداتا
+    // Target file for logging telemetry data
     private val fileName = "driving_data.csv"
 
     fun logBufferToCsv(frames: List<SensorFrame>, label: DrivingState) {
         try {
-            val file = File(context.filesDir, fileName)
+            val file = File(context.getExternalFilesDir(null), fileName)
             val isNewFile = !file.exists()
 
-            // بنفتح الملف في وضع الـ Append عشان نكمل كتابة عليه مش نمسحه
             FileWriter(file, true).use { writer ->
-                // لو الملف جديد، نكتب العناوين فوق (الهيدر)
                 if (isNewFile) {
-                    writer.append("timestamp,speed,rpm,steeringAngle,brake,label\n")
+                    writer.append("timestamp_ms,speed_ms,rpm,steering_angle,brake_input,gear,label\n")
                 }
 
-                // نلف على الـ 50 قراءة ونكتبهم في الملف
                 frames.forEach { frame ->
-                    writer.append("${frame.timestamp},${frame.speed},${frame.rpm},${frame.steeringAngle},${frame.brake},${label.name}\n")
+                    writer.append("${frame.timestamp},${frame.speed},${frame.rpm},${frame.steeringAngle},${frame.brake},${frame.gear},${label.name}\n")
                 }
             }
-            Log.d("SmartDrive_Data", "Saved ${frames.size} frames with label: ${label.name} to CSV.")
+            Log.d("SmartDrive_Data", "Saved ${frames.size} frames with label: ${label.name} to CSV at: ${file.absolutePath}")
         } catch (e: Exception) {
             Log.e("SmartDrive_Data", "Error saving data to CSV: ${e.message}")
         }
+    }
+
+    fun logFrame(frame: SensorFrame, label: DrivingState) {
+        logBufferToCsv(listOf(frame), label)
     }
 }
