@@ -14,22 +14,17 @@ import javax.inject.Singleton
 object MLModule {
 
     @Provides @Singleton
-    fun provideNormalizer(@ApplicationContext ctx: Context): SensorNormalizer =
-        SensorNormalizer(ctx)
-
-    @Provides @Singleton
-    fun provideFeatureExtractor(): FeatureExtractor = FeatureExtractor()
+    fun provideSmartDriveProcessor(@ApplicationContext ctx: Context): SmartDriveProcessor =
+        SmartDriveProcessor(ctx)
 
     @Provides @Singleton
     fun provideMLEngine(
         @ApplicationContext ctx: Context,
-        normalizer: SensorNormalizer
-    ): MLInferenceEngine = MLInferenceEngine(ctx, normalizer)
+        processor: SmartDriveProcessor
+    ): MLInferenceEngine = MLInferenceEngine(ctx, processor)
 
     @Provides @Singleton
     fun provideBehaviorClassifier(
-        engine: MLInferenceEngine,
-        normalizer: SensorNormalizer,
-        extractor: FeatureExtractor
-    ): BehaviorClassifier = BehaviorClassifier(engine, normalizer, extractor)
+        engine: MLInferenceEngine
+    ): BehaviorClassifier = BehaviorClassifier(engine)
 }

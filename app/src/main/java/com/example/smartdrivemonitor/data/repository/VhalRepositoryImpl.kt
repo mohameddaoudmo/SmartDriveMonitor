@@ -5,9 +5,15 @@ import com.example.smartdrivemonitor.domain.model.SensorFrame
 import com.example.smartdrivemonitor.domain.repository.VhalRepository
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
+import javax.inject.Singleton
 
-class VhalRepositoryImpl @Inject constructor(private val dataSource: VhalDataSource) : VhalRepository {
+@Singleton
+class VhalRepositoryImpl @Inject constructor(
+    private val vhalDataSource: VhalDataSource
+) : VhalRepository {
+
+
     override fun getSensorFusionStream(): Flow<SensorFrame> {
-        return dataSource.getSensorFusionStream()
+        return vhalDataSource.getSensorFusionStream()
     }
 }

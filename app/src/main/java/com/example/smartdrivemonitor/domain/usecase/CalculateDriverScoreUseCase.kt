@@ -10,7 +10,7 @@ class CalculateDriverScoreUseCase {
     operator fun invoke(state: DrivingState): Int {
         val penalty = when (state) {
             DrivingState.HARD_BRAKING -> 5.0        // 5 point penalty for hard braking
-            DrivingState.RAPID_ACCELERATION -> 4.0  // 4 point penalty for rapid acceleration
+            DrivingState.SUDDEN_ACCELERATION -> 4.0  // 4 point penalty for sudden acceleration
             DrivingState.SHARP_TURN -> 3.0          // 3 point penalty for sharp turns
             DrivingState.NORMAL -> -0.5             // 0.5 point reward for normal driving
         }

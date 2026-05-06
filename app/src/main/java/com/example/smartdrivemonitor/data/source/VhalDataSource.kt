@@ -1,92 +1,112 @@
 package com.example.smartdrivemonitor.data.source
 
 import com.example.smartdrivemonitor.domain.model.SensorFrame
-import android.car.VehiclePropertyIds
 import android.car.hardware.CarPropertyValue
 import android.car.hardware.property.CarPropertyManager
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.conflate
-import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.*
 import android.util.Log
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class VhalDataSource @Inject constructor(private val carPropertyManager: CarPropertyManager) {
+class VhalDataSource @Inject constructor(
+    private val carPropertyManager: CarPropertyManager
+) {
+    // PERF_VEHICLE_SPEED (0x11600207) - الوحيد المتاح غالباً للتطبيقات العادية
+    private val SPEED_PROP = 291504647
 
-    private val _sharedFlows = mutableMapOf<Int, Flow<Float>>()
+    // Stream للسرعة الحقيقية القادمة من VHAL
+    private val _realSpeed = MutableStateFlow(0f)
 
-    // VHAL Property IDs
-    // Hardcoded to ensure compilation across different Android Automotive SDK versions
-    private val SPEED_PROP = 291504647        // PERF_VEHICLE_SPEED
-    private val RPM_PROP = 291504901          // ENGINE_RPM
-    private val STEERING_PROP = 291504386     // PERF_STEERING_ANGLE
-    private val BRAKE_PROP = 291505152        // BRAKE_PEDAL_POSITION
-    private val GEAR_PROP = 289408000         // GEAR_SELECTION
+    init {
+        setupSpeedSubscription()
+    }
 
-    private fun observeProperty(propertyId: Int, updateRate: Float): Flow<Float> {
-        return _sharedFlows.getOrPut(propertyId) {
-            callbackFlow {
-                val callback = object : CarPropertyManager.CarPropertyEventCallback {
-                    override fun onChangeEvent(value: CarPropertyValue<*>) {
-                        if (value.propertyId == propertyId) {
-                            val rawValue = value.value
-                            val sensorValue = when (rawValue) {
-                                is Number -> rawValue.toFloat()
-                                is Boolean -> if (rawValue) 1f else 0f
-                                else -> 0f
-                            }
-                            // Log commented out to prevent flooding logcat at 10Hz
-                            // Log.d("VhalDataSource", "Property $propertyId changed: $sensorValue")
-                            trySend(sensorValue)
+    private fun setupSpeedSubscription() {
+        Log.d("VhalDataSource", "Attempting to subscribe to SPEED_PROP (0x${SPEED_PROP.toString(16)})")
+        try {
+            val callback = object : CarPropertyManager.CarPropertyEventCallback {
+                override fun onChangeEvent(value: CarPropertyValue<*>) {
+                    Log.d("VhalDataSource", "VHAL Event Received: Prop=0x${value.propertyId.toString(16)}, Value=${value.value}")
+                    if (value.propertyId == SPEED_PROP) {
+                        val rawValue = value.value
+                        val speedVal = when (rawValue) {
+                            is Float -> rawValue
+                            is Int -> rawValue.toFloat()
+                            is Double -> rawValue.toFloat()
+                            else -> 0f
                         }
-                    }
-
-                    override fun onErrorEvent(propId: Int, zone: Int) {
-                        Log.e("VhalDataSource", "Error on property $propId")
+                        _realSpeed.value = kotlin.math.abs(speedVal)
                     }
                 }
-
-                try {
-                    val success = carPropertyManager.registerCallback(callback, propertyId, updateRate)
-                    if (!success) {
-                        Log.w("VhalDataSource", "Property $propertyId registration failed.")
-                    }
-                } catch (e: Exception) {
-                    Log.e("VhalDataSource", "Failed to register $propertyId", e)
+                override fun onErrorEvent(propId: Int, areaId: Int) {
+                    Log.e("VhalDataSource", "VHAL Error: Prop=0x${propId.toString(16)}, Area=$areaId")
                 }
-
-                awaitClose {
-                    Log.d("VhalDataSource", "Unregistering $propertyId")
-                    carPropertyManager.unregisterCallback(callback)
-                }
-            }.onStart { emit(0f) }.conflate()
+            }
+            val success = carPropertyManager.registerCallback(
+                callback, 
+                SPEED_PROP, 
+                CarPropertyManager.SENSOR_RATE_FAST
+            )
+            Log.d("VhalDataSource", "Registration result: $success")
+        } catch (e: Exception) {
+            Log.e("VhalDataSource", "CRITICAL: VHAL Speed sub failed", e)
         }
     }
 
-    // Separate property flows using defined constants
-    val speedFlow = observeProperty(SPEED_PROP, CarPropertyManager.SENSOR_RATE_NORMAL)
-    val rpmFlow = observeProperty(RPM_PROP, CarPropertyManager.SENSOR_RATE_NORMAL)
-    val steeringFlow = observeProperty(STEERING_PROP, CarPropertyManager.SENSOR_RATE_NORMAL)
-    val brakeFlow = observeProperty(BRAKE_PROP, CarPropertyManager.SENSOR_RATE_ONCHANGE)
-    val gearFlow = observeProperty(GEAR_PROP, CarPropertyManager.SENSOR_RATE_ONCHANGE)
+    fun getSensorFusionStream(): Flow<SensorFrame> {
+        var prevSpeed = 0f
+        var prevTime = System.currentTimeMillis()
+
+        return _realSpeed
+            .sample(100) // تحديث كل 100ms (10Hz) ليناسب الموديل
+            .map { currentSpeed ->
+                val now = System.currentTimeMillis()
+                val dt = ((now - prevTime) / 1000f).coerceAtLeast(0.01f)
+
+                // ── حساب القيم المشتقة (Physics-based derivation)
+                val accel = (currentSpeed - prevSpeed) / dt
+                val decel = (prevSpeed - currentSpeed) / dt
+                
+                val derivedRpm = deriveRpm(currentSpeed, accel)
+                val derivedBrake = (decel / 8f).coerceIn(0f, 1f)
+                val derivedSteer = 0f // لا يمكن اشتقاقه من السرعة
+
+                prevSpeed = currentSpeed
+                prevTime = now
+
+                SensorFrame(
+                    speed = currentSpeed,
+                    rpm = derivedRpm,
+                    steeringAngle = derivedSteer,
+                    brake = derivedBrake,
+                    gear = deriveGear(currentSpeed),
+                    timestamp = now
+                )
+            }
+    }
 
     /**
-     * Combines all individual property flows into a single SensorFrame stream (Sensor Fusion).
+     * حساب RPM تقديري بناءً على السرعة والتسارع لمحاكاة سلوك المحرك
      */
-    fun getSensorFusionStream(): Flow<SensorFrame> {
-        return combine(speedFlow, rpmFlow, steeringFlow, brakeFlow, gearFlow) { speed, rpm, steering, brake, gear ->
-            SensorFrame(
-                speed = speed,
-                rpm = rpm,
-                steeringAngle = steering,
-                brake = brake,
-                gear = gear.toInt(),
-                timestamp = System.currentTimeMillis() // Adding timestamp for model temporal features
-            )
+    private fun deriveRpm(speedMs: Float, accelMs2: Float): Float {
+        val baseRpm = speedMs * 120f // تناسب طردي مع السرعة
+        val accelBoost = (accelMs2 * 300f).coerceAtLeast(0f) // زيادة RPM عند التسارع
+        return (800f + baseRpm + accelBoost).coerceIn(800f, 6500f)
+    }
+
+    /**
+     * حساب الغيار التقديري بناءً على السرعة
+     */
+    private fun deriveGear(speedMs: Float): Int {
+        val kmh = speedMs * 3.6f
+        return when {
+            kmh < 15  -> 1
+            kmh < 30  -> 2
+            kmh < 50  -> 3
+            kmh < 80  -> 4
+            kmh < 110 -> 5
+            else      -> 6
         }
     }
 }

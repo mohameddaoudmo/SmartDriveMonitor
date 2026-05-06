@@ -44,6 +44,8 @@ class MainActivity : ComponentActivity() {
                     val permissions = arrayOf(
                         "android.car.permission.CAR_SPEED",
                         "android.car.permission.CAR_ENGINE_DETAILED",
+                        "android.car.permission.READ_STEERING_STATE",
+                        "android.car.permission.CAR_STEERING",
                         "android.car.permission.CAR_INFO",
                         "android.car.permission.CAR_BRAKE",
                         "android.car.permission.CAR_POWERTRAIN"
@@ -93,7 +95,7 @@ fun DashboardScreen(viewModel: SmartDriveViewModel, onHistoryClick: () -> Unit) 
     val (statusColor, statusText) = when (drivingState) {
         DrivingState.NORMAL -> Color(0xFF00E676) to "SAFE DRIVING"
         DrivingState.HARD_BRAKING -> Color(0xFFFF1744) to "HARD BRAKING"
-        DrivingState.RAPID_ACCELERATION -> Color(0xFFFF9100) to "RAPID ACCEL"
+        DrivingState.SUDDEN_ACCELERATION -> Color(0xFFFF9100) to "SUDDEN ACCEL"
         DrivingState.SHARP_TURN -> Color(0xFFD500F9) to "SHARP TURN"
     }
 

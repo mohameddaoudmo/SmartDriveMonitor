@@ -16,13 +16,12 @@ import javax.inject.Singleton
 private const val TAG = "MLInferenceEngine"
 
 @Singleton
-class MLInferenceEngine @Inject constructor(
+class MLInferenceEngine    @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val normalizer: SensorNormalizer
+    private val processor: SmartDriveProcessor
 ) {
 
     private var interpreter: Interpreter? = null
-    private var nnApiDelegate: NnApiDelegate? = null
 
     // Input buffer: [1, WINDOW_SIZE, N_FEATURES] float32
     private var inputBuffer: ByteBuffer? = null
@@ -31,90 +30,88 @@ class MLInferenceEngine @Inject constructor(
 
     init {
         try {
-            // ── Load TFLite model from assets
             val modelBuffer = FileUtil.loadMappedFile(context, ModelConfig.MODEL_FILENAME)
-
-            // ── NNAPI Delegate for hardware acceleration
-            nnApiDelegate = if (ModelConfig.USE_NNAPI) {
-                try {
-                    NnApiDelegate(NnApiDelegate.Options().apply {
-                        executionPreference = NnApiDelegate.Options.EXECUTION_PREFERENCE_SUSTAINED_SPEED
-                    })
-                } catch (e: Exception) {
-                    Log.w(TAG, "NNAPI not available, using CPU: ${e.message}")
-                    null
-                }
-            } else null
-
             val options = Interpreter.Options().apply {
                 numThreads = ModelConfig.NUM_THREADS
-                nnApiDelegate?.let { addDelegate(it) }
             }
 
-            interpreter = Interpreter(modelBuffer, options)
+            try {
+                interpreter = Interpreter(modelBuffer, options)
+                Log.i(TAG, "TFLite model loaded successfully")
+            } catch (e: Exception) {
+                Log.e(TAG, "Interpreter creation failed: ${e.message}")
+            }
 
-            val nFeatures = normalizer.nFeatures
             // [batch=1, window=50, features=11] × 4 bytes (float32)
-            inputBuffer  = ByteBuffer.allocateDirect(1 * ModelConfig.WINDOW_SIZE * nFeatures * 4)
+            inputBuffer  = ByteBuffer.allocateDirect(1 * 50 * 11 * 4)
                 .order(ByteOrder.nativeOrder())
-            // [batch=1, classes=4] × 4 bytes
             outputBuffer = ByteBuffer.allocateDirect(1 * 4 * 4)
                 .order(ByteOrder.nativeOrder())
 
-            Log.i(TAG, "MLInferenceEngine initialized — model: ${ModelConfig.MODEL_FILENAME}")
+            Log.i(TAG, "MLInferenceEngine initialized with SmartDriveProcessor")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize TFLite: ${e.message}")
         }
     }
 
     /**
-     * Performs model inference on a window of normalized feature vectors.
+     * Performs model inference using raw sensor data.
      */
-    fun classify(window: List<FloatArray>): BehaviorResult? {
+    fun processAndClassify(
+        speedMs: Float,
+        rpm: Float,
+        steering: Float,
+        brake: Float,
+        gearNorm: Float = 0.5f
+    ): BehaviorResult? {
         val interp = interpreter ?: return null
         val inBuf = inputBuffer ?: return null
         val outBuf = outputBuffer ?: return null
 
-        if (window.size < ModelConfig.WINDOW_SIZE) {
-            return null
-        }
+        // 1. Process frame and get flat window array [550]
+        val flatWindow = processor.processFrame(speedMs, rpm, steering, brake, gearNorm) ?: return null
 
         val startTime = System.currentTimeMillis()
 
-        // ── Fill input buffer
+        // 2. Fill input buffer
         inBuf.clear()
-        window.takeLast(ModelConfig.WINDOW_SIZE).forEach { features ->
-            features.forEach { value -> inBuf.putFloat(value) }
-        }
+        flatWindow.forEach { inBuf.putFloat(it) }
         inBuf.rewind()
         outBuf.clear()
 
-        // ── Run inference
-        interp.run(inBuf, outBuf)
+        // 3. Run inference
+        try {
+            interp.run(inBuf, outBuf)
+        } catch (e: Exception) {
+            Log.e(TAG, "Inference failed: ${e.message}")
+            return null
+        }
 
         val inferenceMs = System.currentTimeMillis() - startTime
 
-        // ── Parse output probabilities
+        // 4. Parse output
         outBuf.rewind()
         val probs = FloatArray(4) { outBuf.float }
 
         val classIdx   = probs.indices.maxByOrNull { probs[it] } ?: 0
         val confidence = probs[classIdx]
 
-        val behaviorClass = if (confidence >= ModelConfig.MIN_CONFIDENCE) {
-            when (classIdx) {
-                ModelConfig.CLASS_NORMAL -> BehaviorClass.NORMAL
-                ModelConfig.CLASS_ACCEL  -> BehaviorClass.SUDDEN_ACCELERATION
-                ModelConfig.CLASS_BRAKE  -> BehaviorClass.HARD_BRAKING
-                ModelConfig.CLASS_TURN   -> BehaviorClass.SHARP_TURN
-                else                     -> BehaviorClass.UNKNOWN
-            }
-        } else {
-            BehaviorClass.UNKNOWN
+        val behaviorClass = when (classIdx) {
+            ModelConfig.CLASS_NORMAL -> BehaviorClass.NORMAL
+            ModelConfig.CLASS_ACCEL  -> BehaviorClass.SUDDEN_ACCELERATION
+            ModelConfig.CLASS_BRAKE  -> BehaviorClass.HARD_BRAKING
+            ModelConfig.CLASS_TURN   -> BehaviorClass.SHARP_TURN
+            else                     -> BehaviorClass.UNKNOWN
         }
 
+        val resultClass = if (confidence >= ModelConfig.MIN_CONFIDENCE) behaviorClass else BehaviorClass.UNKNOWN
+
+        Log.d("SmartDrive_ML", "Threshold: ${ModelConfig.MIN_CONFIDENCE}, Confidence: $confidence")
+        Log.i("SmartDrive_ML", "RAW PROBS: [${probs.joinToString(", ")}]")
+        Log.i("SmartDrive_ML", "BEST GUESS: $behaviorClass")
+        
         return BehaviorResult(
-            behaviorClass   = behaviorClass,
+            behaviorClass   = resultClass,
             confidence      = confidence,
             probabilities   = probs,
             inferenceTimeMs = inferenceMs
@@ -123,6 +120,5 @@ class MLInferenceEngine @Inject constructor(
 
     fun close() {
         interpreter?.close()
-        nnApiDelegate?.close()
     }
 }

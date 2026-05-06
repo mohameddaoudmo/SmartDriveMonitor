@@ -9,6 +9,7 @@ import com.example.smartdrivemonitor.domain.model.SensorFrame
 import com.example.smartdrivemonitor.domain.repository.VhalRepository
 import com.example.smartdrivemonitor.domain.usecase.AnalyzeDrivingBehaviorUseCase
 import com.example.smartdrivemonitor.domain.usecase.CalculateDriverScoreUseCase
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -68,22 +69,27 @@ class SmartDriveViewModel @Inject constructor(
     }
 
     private fun startDataPipeline() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.Default) {
             repository.getSensorFusionStream().collect { frame ->
-                // 1. Log incoming data for debugging
+                // 1. Minimal logging to avoid performance hits
                 Log.d("SmartDriveVM", "New Frame - Speed: ${frame.speed}, RPM: ${frame.rpm}")
 
-                // 2. Update raw sensor UI
+                // 2. Log to CSV (Data Logging) - Calculate ground truth BEFORE updating carState
+                val groundTruthState = deriveLabel(frame)
+                dataLogger.logFrame(frame, groundTruthState)
+
+                // 3. Update raw sensor UI
                 _carState.value = frame
 
-                // 3. Feed to ML classifier
+                // 4. Feed to ML classifier
                 val result = classifier.addFrame(frame)
                 result?.let { r ->
+                    Log.i("SmartDrive_ML", "PREDICTION: ${r.behaviorClass} (Confidence: ${r.confidence})")
                     _mlResult.value = r
                     
                     val legacyState = when(r.behaviorClass) {
                         BehaviorClass.NORMAL -> DrivingState.NORMAL
-                        BehaviorClass.SUDDEN_ACCELERATION -> DrivingState.RAPID_ACCELERATION
+                        BehaviorClass.SUDDEN_ACCELERATION -> DrivingState.SUDDEN_ACCELERATION
                         BehaviorClass.HARD_BRAKING -> DrivingState.HARD_BRAKING
                         BehaviorClass.SHARP_TURN -> DrivingState.SHARP_TURN
                         else -> DrivingState.NORMAL
@@ -96,7 +102,7 @@ class SmartDriveViewModel @Inject constructor(
                     _driverScore.value = runningScore.toInt()
                 }
 
-                // 4. Trip Tracking Logic
+                // 5. Trip Tracking Logic
                 if (frame.speed > 1.4f) { // ~5 km/h
                     stopTimerJob?.cancel()
                     if (currentTrip == null) {
@@ -121,12 +127,32 @@ class SmartDriveViewModel @Inject constructor(
                         }
                     }
                 }
-
-                // 5. Log to CSV (Data Logging)
-                // Using the state in the ViewModel to decide logging
-                val state = _drivingState.value
-                dataLogger.logFrame(frame, state) 
             }
+        }
+    }
+
+    /**
+     * Derives a driving state label based on sensor thresholds.
+     * Used for ground truth labeling in CSV data collection.
+     */
+    private fun deriveLabel(frame: SensorFrame): DrivingState {
+        val speedKmh = frame.speed * 3.6f
+        
+        // Calculate deceleration from previous frame in the UI state
+        val prevSpeedKmh = _carState.value.speed * 3.6f
+        val decelerationKmh = prevSpeedKmh - speedKmh // positive means slowing down
+
+        return when {
+            // Sudden Acceleration: High RPM + speed above 40 km/h
+            frame.rpm > 3500f && speedKmh > 40f -> DrivingState.SUDDEN_ACCELERATION
+            
+            // Hard Braking: Sudden drop in speed (more than 15 km/h between frames)
+            decelerationKmh > 10f && speedKmh < 20f -> DrivingState.HARD_BRAKING
+            
+            // Sharp Turn: High steering angle
+            kotlin.math.abs(frame.steeringAngle) > 25f -> DrivingState.SHARP_TURN
+            
+            else -> DrivingState.NORMAL
         }
     }
 

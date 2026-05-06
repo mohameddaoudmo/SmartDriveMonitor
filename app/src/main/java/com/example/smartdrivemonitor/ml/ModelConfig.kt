@@ -19,7 +19,7 @@ object ModelConfig {
     val CLASS_NAMES = listOf("NORMAL", "SUDDEN_ACCELERATION", "HARD_BRAKING", "SHARP_TURN")
 
     // Confidence threshold - Probabilities below this will result in UNKNOWN classification
-    const val MIN_CONFIDENCE    = 0.60f
+    const val MIN_CONFIDENCE    = 0.40f
 
     // TFLite thread config
     const val NUM_THREADS       = 2

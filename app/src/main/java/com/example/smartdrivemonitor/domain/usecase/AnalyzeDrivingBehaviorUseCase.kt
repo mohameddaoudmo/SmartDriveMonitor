@@ -2,31 +2,33 @@ package com.example.smartdrivemonitor.domain.usecase
 
 import com.example.smartdrivemonitor.domain.model.DrivingState
 import com.example.smartdrivemonitor.domain.model.SensorFrame
+import javax.inject.Inject
 import kotlin.math.abs
 
-class AnalyzeDrivingBehaviorUseCase {
+class AnalyzeDrivingBehaviorUseCase @Inject constructor() {
 
-    // Operator invoke allows the UseCase to be called as a function
-    operator fun invoke(frames: List<SensorFrame>): DrivingState {
-        if (frames.size < 2) return DrivingState.NORMAL
+    /**
+     * Thresholds for rule-based behavioral labeling.
+     * Note: This version is tuned for emulator data where some sensors (like Brake) are derived.
+     */
+    operator fun invoke(frame: SensorFrame): DrivingState {
+        val speedKmh = frame.speed * 3.6f
 
-        val firstFrame = frames.first()
-        val lastFrame = frames.last()
-        
-        val timeDiffSeconds = (lastFrame.timestamp - firstFrame.timestamp) / 1000f
-        if (timeDiffSeconds <= 0f) return DrivingState.NORMAL
-
-        val speedDiff = lastFrame.speed - firstFrame.speed
-        val acceleration = speedDiff / timeDiffSeconds
-
-        val maxBrake = frames.maxOf { it.brake }
-        val maxSteering = frames.maxOf { abs(it.steeringAngle) }
-
-        return when {
-            acceleration < -5.0f || maxBrake > 80f -> DrivingState.HARD_BRAKING
-            acceleration > 5.0f -> DrivingState.RAPID_ACCELERATION
-            maxSteering > 45f && lastFrame.speed > 10f -> DrivingState.SHARP_TURN
-            else -> DrivingState.NORMAL
+        // Sudden Acceleration: High Speed combined with High RPM
+        if (frame.rpm > 3500f && speedKmh > 40f) {
+            return DrivingState.SUDDEN_ACCELERATION
         }
+        
+        // Hard Braking: High derived brake force
+        if (frame.brake > 0.4f) {
+            return DrivingState.HARD_BRAKING
+        }
+        
+        // Sharp Turn: Significant steering angle
+        if (abs(frame.steeringAngle) > 25f) {
+            return DrivingState.SHARP_TURN
+        }
+        
+        return DrivingState.NORMAL
     }
 }

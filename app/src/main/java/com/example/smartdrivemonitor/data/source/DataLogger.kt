@@ -26,11 +26,18 @@ class DataLogger @Inject constructor(@ApplicationContext private val context: Co
                     writer.append("timestamp_ms,speed_ms,rpm,steering_angle,brake_input,gear,label\n")
                 }
 
+                val labelString = when(label) {
+                    DrivingState.NORMAL -> "NORMAL"
+                    DrivingState.SUDDEN_ACCELERATION -> "SUDDEN_ACCELERATION"
+                    DrivingState.HARD_BRAKING -> "HARD_BRAKING"
+                    DrivingState.SHARP_TURN -> "SHARP_TURN"
+                }
+
                 frames.forEach { frame ->
-                    writer.append("${frame.timestamp},${frame.speed},${frame.rpm},${frame.steeringAngle},${frame.brake},${frame.gear},${label.name}\n")
+                    writer.append("${frame.timestamp},${frame.speed},${frame.rpm},${frame.steeringAngle},${frame.brake},${frame.gear},${labelString}\n")
                 }
             }
-            Log.d("SmartDrive_Data", "Saved ${frames.size} frames with label: ${label.name} to CSV at: ${file.absolutePath}")
+            // Log.d("SmartDrive_Data", "Saved ${frames.size} frames with label: ${label.name} to CSV at: ${file.absolutePath}")
         } catch (e: Exception) {
             Log.e("SmartDrive_Data", "Error saving data to CSV: ${e.message}")
         }
