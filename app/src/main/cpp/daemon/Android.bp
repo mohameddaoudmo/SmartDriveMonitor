@@ -19,7 +19,7 @@ cc_binary {
         "com.smartcabin-cpp", // Compiled AIDL static header interface
     ],
     init_rc: ["driver_monitor.rc"],
-    vendor: true, // مهم جداً: لتشغيل الخدمة في قسم الـ Vendor
+    vendor: true,
     cflags: [
         "-Wall",
         "-Werror",

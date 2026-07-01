@@ -52,6 +52,7 @@ android {
     buildFeatures {
         compose = true
         aidl = true
+        mlModelBinding = true
     }
     aaptOptions {
         noCompress += "tflite"
