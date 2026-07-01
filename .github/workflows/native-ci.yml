@@ -1,0 +1,27 @@
+name: Native Core CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install GTest
+      run: sudo apt-get install -y libgtest-dev cmake
+
+    - name: Compile AnfisEngine Tests
+      run: |
+        g++ -std=c++17 \
+          app/src/test/cpp/anfis_engine_test.cpp \
+          app/src/main/cpp/anfis_engine/AnfisEngine.cpp \
+          -lgtest -lgtest_main -pthread \
+          -o anfis_test
+
+    - name: Run Tests
+      run: ./anfis_test

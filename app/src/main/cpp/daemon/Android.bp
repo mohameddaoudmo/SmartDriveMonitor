@@ -1,0 +1,28 @@
+// Android.bp build system blueprint for compiling the standalone daemon in AOSP
+cc_binary {
+    name: "driver_monitor_daemon",
+    srcs: [
+        "driver_monitor_daemon.cpp",
+        "DaemonCore.cpp",
+        "../sensor_fusion/KalmanFilter.cpp",
+        "../sensor_fusion/CanDecoder.cpp",
+        "../anfis_engine/AnfisEngine.cpp",
+    ],
+    shared_libs: [
+        "libbinder_ndk",
+        "libutils",
+        "liblog",
+        "libbase",
+        "libbinder",
+    ],
+    static_libs: [
+        "com.smartcabin-cpp", // Compiled AIDL static header interface
+    ],
+    init_rc: ["driver_monitor.rc"],
+    vendor: true, // مهم جداً: لتشغيل الخدمة في قسم الـ Vendor
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-std=c++17",
+    ],
+}

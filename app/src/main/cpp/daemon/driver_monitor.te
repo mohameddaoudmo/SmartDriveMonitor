@@ -1,0 +1,22 @@
+# SELinux Policy declarations for the Driver Monitor Daemon
+type driver_monitor_daemon, domain;
+type driver_monitor_daemon_exec, exec_type, vendor_file_type, file_type;
+
+# Allow init to execute the daemon executable and transition to the daemon domain
+init_daemon_domain(driver_monitor_daemon)
+
+# Enable binder IPC use
+binder_use(driver_monitor_daemon)
+binder_call(driver_monitor_daemon, system_server)
+binder_call(driver_monitor_daemon, platform_app)
+
+# Allow registering the service with the Android Service Manager
+allow driver_monitor_daemon driver_monitor_service:service_manager add;
+
+# Enable UDP network communications for receiving replay CAN frames
+allow driver_monitor_daemon self:udp_socket { create bind read write };
+allow driver_monitor_daemon node:udp_socket node_bind;
+allow driver_monitor_daemon port:udp_socket name_bind;
+
+# Allow logging to Android logcat/logd
+android_log_write(driver_monitor_daemon)

@@ -7,17 +7,30 @@ plugins {
 }
 
 android {
-    namespace = "com.example.smartdrivemonitor"
+    namespace = "com.smartcabin"
     compileSdk = 36
     useLibrary("android.car")
     defaultConfig {
-        applicationId = "com.example.smartdrivemonitor"
+        applicationId = "com.smartcabin"
         minSdk = 30
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        externalNativeBuild {
+            cmake {
+                cppFlags("-std=c++17")
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     buildTypes {
@@ -38,6 +51,7 @@ android {
     }
     buildFeatures {
         compose = true
+        aidl = true
     }
     aaptOptions {
         noCompress += "tflite"

@@ -1,0 +1,9 @@
+# Init configuration for the Standalone Explainable Driver Monitoring Daemon
+service driver_monitor_daemon /vendor/bin/driver_monitor_daemon
+    class hal
+    user system
+    group system inet
+    seclabel u:r:driver_monitor_daemon:s0
+    oneshot
+    onrestart restart driver_monitor_daemon
+
