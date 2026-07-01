@@ -11,6 +11,9 @@
     <uses-permission android:name="android.car.permission.CAR_BRAKE" />
     <uses-permission android:name="android.car.permission.CAR_POWERTRAIN" />
 
+    <permission android:name="com.smartcabin.permission.BIND_DRIVER_MONITOR" android:protectionLevel="signature" />
+    <uses-permission android:name="com.smartcabin.permission.BIND_DRIVER_MONITOR" />
+
     <application
         android:name=".SmartDriveApp"
         android:allowBackup="true"
@@ -32,6 +35,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service android:name=".nativecore.DriverMonitorService" 
+                 android:process=":daemon" 
+                 android:permission="com.smartcabin.permission.BIND_DRIVER_MONITOR" 
+                 android:exported="true" />
     </application>
 
 </manifest>
