@@ -1,5 +1,6 @@
 # SmartDrive Monitor for Android Automotive OS (AAOS)
 
+[![Android CI/CD](https://github.com/mohameddaoudmo/SmartDriveMonitor/actions/workflows/native-ci.yml/badge.svg)](https://github.com/mohameddaoudmo/SmartDriveMonitor/actions/workflows/native-ci.yml)
 SmartDrive Monitor is an advanced, production-grade Android Automotive OS application designed to evaluate driver behavior in real-time. It leverages a custom **Adaptive Neuro-Fuzzy Inference System (ANFIS)** running in an isolated C++ daemon to process vehicle telemetry data and provide explainable AI (XAI) insights directly to the driver dashboard.
 
 ## 🚀 Key Features
