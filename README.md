@@ -20,6 +20,39 @@ The system is built with automotive-grade engineering principles, strictly separ
 3.  **AIDL Interface**: The secure bridge. The Daemon exposes an `IDriverMonitorService` that the Android app binds to.
 4.  **Android App (Kotlin/Compose)**: The foreground HMI. Utilizes Dagger Hilt for dependency injection, Kotlin StateFlow for reactive UI updates, and Jetpack Compose for rendering the dashboard at 60fps.
 
+```mermaid
+graph TD
+    subgraph "Android UI (Kotlin/Compose)"
+        UI[Dashboard HMI] --> VM[ViewModel & StateFlow]
+        VM --> Repo[Daemon Repository]
+    end
+
+    subgraph "Secure IPC Boundary"
+        Repo -- Binds to --> AIDL[IDriverMonitorService.aidl]
+    end
+
+    subgraph "Native C++ System Daemon"
+        AIDL --> DaemonCore[Daemon Core]
+        DaemonCore --> ANFIS[ANFIS AI Engine]
+        RingBuffer[(Lock-Free Ring Buffer)] --> ANFIS
+    end
+
+    subgraph "Hardware Layer"
+        VHAL[Vehicle HAL / Sensors] -- "Telemetry (100Hz)" --> RingBuffer
+    end
+
+    %% Styling
+    classDef ui fill:#4CAF50,stroke:#388E3C,stroke-width:2px,color:white;
+    classDef native fill:#2196F3,stroke:#1976D2,stroke-width:2px,color:white;
+    classDef hardware fill:#FF9800,stroke:#F57C00,stroke-width:2px,color:white;
+    classDef ipc fill:#9C27B0,stroke:#7B1FA2,stroke-width:2px,color:white;
+
+    class UI,VM,Repo ui;
+    class DaemonCore,ANFIS,RingBuffer native;
+    class VHAL hardware;
+    class AIDL ipc;
+```
+
 ## 🛠️ Technology Stack
 
 *   **UI/App Layer**: Kotlin, Jetpack Compose, Coroutines/StateFlow, Dagger Hilt, MVVM.
